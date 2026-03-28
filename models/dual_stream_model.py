@@ -63,7 +63,7 @@ class Fusion(nn.Module):
 # Final Model
 # ----------------------------
 class DualStreamModel(nn.Module):
-    def __init__(self, num_classes=3):
+    def __init__(self, num_classes=3, dropout=0.3):  # 🔥 added dropout param
         super().__init__()
 
         self.rgb_backbone = BackboneRGB()
@@ -76,7 +76,7 @@ class DualStreamModel(nn.Module):
             nn.Flatten(),
             nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout),   # 🔥 dynamic
             nn.Linear(64, num_classes)
         )
 

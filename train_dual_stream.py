@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+import os
 
 from dataset_loader import DualStreamDataset
 from models.dual_stream_model import DualStreamModel
@@ -10,11 +11,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # ----------------------------
-# Hyperparameters (same as GWO best)
+# Create images folder
 # ----------------------------
-BEST_LR = 0.0004
-BEST_BATCH = 4
-EPOCHS = 20
+os.makedirs("images", exist_ok=True)
+
+# ----------------------------
+# 🔥 BEST PARAMS FROM GWO
+# ----------------------------
+BEST_LR = 0.000346
+BEST_BATCH = 8
+DROPOUT = 0.285
+EPOCHS = 25
 
 # ----------------------------
 # Dataset
@@ -31,13 +38,18 @@ print("Val samples:", len(val_dataset))
 # ----------------------------
 # Model
 # ----------------------------
-model = DualStreamModel(num_classes=3).to(device)
+model = DualStreamModel(num_classes=3, dropout=DROPOUT).to(device)
 
 # ----------------------------
 # Training Setup
 # ----------------------------
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=BEST_LR)
+
+# 🔥 Learning rate scheduler
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='max', factor=0.5, patience=3
+)
 
 train_losses = []
 val_accuracies = []
@@ -61,8 +73,11 @@ for epoch in range(EPOCHS):
 
         optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
 
+        # 🔥 Gradient clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+
+        optimizer.step()
         total_loss += loss.item()
 
     train_losses.append(total_loss)
@@ -93,6 +108,9 @@ for epoch in range(EPOCHS):
 
     print(f"Validation Accuracy: {acc:.2f}%")
 
+    # Scheduler step
+    scheduler.step(acc)
+
     # Save best model
     if acc > best_acc:
         best_acc = acc
@@ -107,6 +125,12 @@ torch.save(model.state_dict(), "last_dual_model.pth")
 print(f"\n🏆 Best Validation Accuracy: {best_acc:.2f}%")
 
 # ----------------------------
+# Save results summary
+# ----------------------------
+with open("images/results.txt", "w") as f:
+    f.write(f"Best Accuracy: {best_acc:.2f}%")
+
+# ----------------------------
 # Graphs
 # ----------------------------
 plt.figure()
@@ -115,7 +139,7 @@ plt.title("Dual Stream Training Loss")
 plt.xlabel("Epoch")
 plt.ylabel("Loss")
 plt.grid()
-plt.savefig("dual_loss_curve.png")
+plt.savefig("images/dual_loss_curve.png")
 
 plt.figure()
 plt.plot(val_accuracies, marker='o')
@@ -123,6 +147,6 @@ plt.title("Dual Stream Validation Accuracy")
 plt.xlabel("Epoch")
 plt.ylabel("Accuracy (%)")
 plt.grid()
-plt.savefig("dual_accuracy_curve.png")
+plt.savefig("images/dual_accuracy_curve.png")
 
-print("📊 Graphs saved!")
+print("📊 Graphs saved in 'images/' folder!")
